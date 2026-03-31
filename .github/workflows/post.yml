@@ -1,0 +1,29 @@
+name: Post to Bluesky
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # triggers every hour; the script adds a random delay internally
+  workflow_dispatch:        # allows manual trigger from the GitHub Actions tab
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Post to Bluesky
+        env:
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          ONE_SHOT: "1"
+        run: python post_pinay_to_bluesky.py
