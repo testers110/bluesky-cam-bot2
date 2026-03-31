@@ -48,7 +48,7 @@ def filter_rooms(rooms: list[dict]) -> list[dict]:
     filtered = []
     for room in rooms:
         gender = (room.get("gender") or "").lower()
-        country = (room.get("location") or "").upper().strip()
+        country = (room.get("country") or "").upper().strip()
 
         if gender != "f":
             continue
@@ -101,10 +101,11 @@ def build_post(room: dict) -> tuple[str, list[dict]]:
     """
     username = room.get("username", "unknown")
     room_url = (
-        f"https://chaturbate.com/in/?tour=grqC&campaign=HcOhv&track=default&room={username}"
+        room.get("chat_room_url_revshare")
+        or f"https://chaturbate.com/in/?tour=LQps&campaign=HcOhv&track=default&room={username}"
     )
 
-    subject = room.get("subject", "")
+    subject = room.get("room_subject", "")
     raw_tags = room.get("tags", []) or []
 
     base_hashtags = ["#nsfw", "#nsfwsky", "#pinay", "#filipina"]
