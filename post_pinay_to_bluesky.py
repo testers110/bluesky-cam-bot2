@@ -4,7 +4,7 @@ Bluesky Bot - Posts Filipina/Pinay female Chaturbate rooms to Bluesky
 Fetches rooms by tag (pinay, filipina) and country (PH).
 Runs hourly at a random time within the hour.
 Requires environment variables:
-  BLUESKY_HANDLE       - your Bluesky handle (e.g. yourname.bsky.social)
+  BLUESKY_HANDLE - your Bluesky handle (e.g. yourname.bsky.social)
   BLUESKY_APP_PASSWORD - your Bluesky app password (NOT your login password)
 """
 
@@ -30,7 +30,6 @@ CHATURBATE_API_BASE = (
 PINAY_TAGS = ["pinay", "filipina"]
 
 BLUESKY_API_BASE = "https://bsky.social/xrpc"
-
 
 def get_chaturbate_rooms() -> list:
     """Fetch Filipina/Pinay rooms by tag and by country, deduplicated."""
@@ -70,23 +69,25 @@ def get_chaturbate_rooms() -> list:
 
     return combined
 
-
 def filter_rooms(rooms: list) -> list:
     """Keep only female performers."""
     return [r for r in rooms if (r.get("gender") or "").lower() == "f"]
 
-
 def bsky_login(handle: str, app_password: str) -> dict:
     """Create a Bluesky session and return the session dict."""
     url = f"{BLUESKY_API_BASE}/com.atproto.server.createSession"
+    payload = {"identifier": handle, "password": app_password}
     resp = requests.post(
         url,
-        json={"identifier": handle, "password": app_password},
+        json=payload,
         timeout=30,
     )
+    # Add more detail on 401 errors
+    if resp.status_code == 401:
+        log.error("401 from createSession. Check BLUESKY_HANDLE and BLUESKY_APP_PASSWORD.")
+        log.error("Response: %s", resp.text)
     resp.raise_for_status()
     return resp.json()
-
 
 def upload_image(session: dict, image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
     """Upload an image blob to Bluesky and return the blob reference."""
@@ -103,14 +104,12 @@ def upload_image(session: dict, image_bytes: bytes, mime_type: str = "image/jpeg
     resp.raise_for_status()
     return resp.json()["blob"]
 
-
 def fetch_image(url: str) -> tuple:
     """Download an image from a URL; return (bytes, mime_type)."""
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
     return resp.content, content_type
-
 
 def build_post(room: dict) -> tuple:
     """Build the post text and facets (rich-text annotations) for a room."""
@@ -166,7 +165,7 @@ def build_post(room: dict) -> tuple:
         pos = idx + len(tag)
 
     watch_idx = text.rfind(watch_label)
-    if watch_idx != -1:
+    if watch_idx!= -1:
         start_byte = len(text[:watch_idx].encode("utf-8"))
         end_byte = start_byte + len(watch_label.encode("utf-8"))
         facets.append(
@@ -182,7 +181,6 @@ def build_post(room: dict) -> tuple:
         )
 
     return text, facets
-
 
 def post_room(session: dict, room: dict) -> bool:
     """Create a Bluesky post for the given room. Returns True on success."""
@@ -236,17 +234,31 @@ def post_room(session: dict, room: dict) -> bool:
         return True
     except Exception as exc:
         log.error("Failed to post room %s: %s", username, exc)
+        if hasattr(exc, 'response') and exc.response is not None:
+            log.error("Response: %s", exc.response.text)
         return False
-
 
 def run_once():
     """Fetch rooms, pick one at random, and post it to Bluesky."""
     handle = os.environ.get("BLUESKY_HANDLE", "").strip()
     app_password = os.environ.get("BLUESKY_APP_PASSWORD", "").strip()
 
+    # DEBUG: Shows what the script actually received from GitHub Actions
+    log.info("Handle loaded: '%s'", handle)
+    log.info("Password present: %s", 'yes' if app_password else 'no')
+    log.info("Password length: %d", len(app_password))
+
     if not handle or not app_password:
         log.error("Missing BLUESKY_HANDLE or BLUESKY_APP_PASSWORD environment variables.")
         sys.exit(1)
+
+    if len(app_password)!= 19:
+        log.warning("App password length is %d, expected 19. Make sure you're using an app password, not your main password.", len(app_password))
+
+    if '@' in handle:
+        log.warning("Handle contains '@'. Should be 'name.bsky.social' not '@name.bsky.social'")
+    if not ('.' in handle):
+        log.warning("Handle '%s' has no domain. Should be 'name.bsky.social'", handle)
 
     log.info("Fetching Chaturbate rooms...")
     all_rooms = get_chaturbate_rooms()
@@ -263,12 +275,12 @@ def run_once():
 
     try:
         session = bsky_login(handle, app_password)
+        log.info("Bluesky login success for DID: %s", session.get("did"))
     except Exception as exc:
         log.error("Bluesky login failed: %s", exc)
         sys.exit(1)
 
     post_room(session, room)
-
 
 def main():
     """Run in a loop, posting every hour at a random offset."""
@@ -293,7 +305,6 @@ def main():
             next_delay / 60,
         )
         time.sleep(next_delay)
-
 
 if __name__ == "__main__":
     if "--once" in sys.argv or os.environ.get("ONE_SHOT", "").lower() in ("1", "true", "yes"):
